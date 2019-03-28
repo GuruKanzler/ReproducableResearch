@@ -1,0 +1,135 @@
+---
+title: "Reproducible Research: Peer Assessment 1"
+output: 
+  html_document:
+    keep_md: true
+---
+###Initialization
+```{r}
+library(plyr)
+library(lattice)
+```
+
+## Loading and preprocessing the data
+Load the dataset and have a look at its structure, and data types:
+```{r}
+activity <- read.csv("activity.csv")
+str(activity)
+```
+Ok, so the "date" columns is currently a factor. Let's do something about that:
+```{r}
+activity[,2] <- as.Date(activity$date)
+```
+Let's have a look at the structure again:
+```{r}
+str(activity)
+```
+
+
+## What is mean total number of steps taken per day?
+Sweet, now that the dataset is in order, let's have a look at the characteristics of the data in terms of mean and median:
+```{r}
+steps <- with(activity,tapply(steps,date,sum, na.rm=T))
+steps_mean <- round(mean(steps),1)
+steps_median <- median(steps)
+print(paste0("Mean steps per day is: ", steps_mean, ", and median: ", steps_median))
+```
+I see that this person has a better score than me, as I'm mostly just sitting on my arse in my office. Well well, always room for improvement.
+  
+Let's do a histogram:
+```{r}
+steps_withNAs <- with(activity,tapply(steps,date,sum, na.rm=F))
+hist(steps_withNAs, xlab = "Steps per day", main = "Histogram of number of steps per day (with NA's)")
+```
+
+
+## What is the average daily activity pattern?
+A time series plot over average number of steps (x-axis) take per interval accross all days (y-axis):
+```{r}
+mean_steps_per_interval <-with(activity,tapply(steps,interval,mean,na.rm=T))
+intervals<-unique(activity$interval)
+df_avgsteps_interval <-data.frame(cbind(mean_steps_per_interval,intervals))
+plot(df_avgsteps_interval$intervals,
+    df_avgsteps_interval$mean_steps_per_interval,
+    type = "l",
+    xlab = "Intervals",
+    ylab = "Average Steps",
+    main = "Average Steps per Interval")
+```
+
+Which 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps?
+```{r}
+index<-which.max(df_avgsteps_interval$mean_steps_per_interval)
+print(df_avgsteps_interval[index,2])
+```
+
+As we saw earlier, the "steps" column has a lot of NA's. How many?
+```{r}
+sum(is.na(activity$steps))
+```
+
+
+## Imputing missing values
+Next task is to replace the NA's in steps to later see the consequences of not taking these into account. First, let's create a copy of the activity data set where the NA's are replaced with the average number of steps per day.
+```{r}
+index<-which(is.na(activity$steps))
+l<-length(index)
+steps_avg<-with(activity,tapply(steps,date,mean,na.rm=T))
+na<-mean(steps_avg,na.rm = T)
+
+##Create a copy of activity where NA's are replaced
+activity_noNA <- activity
+for (i in 1:l) {
+        activity_noNA[index[i],1]<-na
+}
+```
+  
+Let's compare the old and new version of the activity dataset:
+```{r}
+head(activity)
+head(activity_noNA)
+```
+  
+And then move on to compare histograms over first and new version:
+```{r}
+steps_noNAs <- with(activity_noNA,tapply(steps,date,sum))
+hist(steps_noNAs, ylim = c(0,40), xlab = "Steps per day", main = "Histogram of number of steps/day (NA's replaced with an average)")
+steps_withNAs <- with(activity,tapply(steps,date,sum, na.rm=F))
+hist(steps_withNAs,ylim = c(0,40), xlab = "Steps per day", main = "Histogram of number of steps/day (with NA's)")
+```
+  
+Whatabout changes in mean and median between the two datasets?
+```{r}
+steps_noNAs_mean <- round(mean(steps_noNAs),1)
+steps_noNAs_median <- round(median(steps_noNAs),1)
+print(paste0("Mean steps when NA's still there: ", steps_mean, ", and without NA's: ", steps_noNAs_mean))
+print(paste0("Median steps when NA's still there: ", steps_median, ", and without NA's: ", steps_noNAs_median))
+```
+
+
+## Are there differences in activity patterns between weekdays and weekends?
+On a different note, is there a difference in pattern between weekdays and weekends?
+(using the dataset where NA's are replaced with an average)
+  
+Let's first categorize each day as a weekday/weekend, and add that category as a factor:
+```{r}
+activity_noNA$DayCategory <- ifelse(weekdays(activity_noNA$date) %in% c("Saturday", "Sunday"), "Weekend", "Weekday")
+
+```
+  
+Now, let's look at the difference in pattern:
+```{r}
+## Summarize data by interval and type of day
+df_avgsteps_interval_2 <- ddply(activity_noNA, .(interval, DayCategory), summarize, Avg = mean(steps))
+head(df_avgsteps_interval_2)
+
+##Plot data in a panel plot
+xyplot(Avg~interval|DayCategory, 
+       data=df_avgsteps_interval_2, 
+       type="l", 
+       layout = c(1,2),
+       main="Average Steps per Interval based on type of day",
+       ylab="Average Number of Steps",
+       xlab="Interval")
+
+```
